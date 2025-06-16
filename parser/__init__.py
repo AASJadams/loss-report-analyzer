@@ -1,59 +1,92 @@
 import pandas as pd
+import pdfplumber
+import re
+from PyPDF2 import PdfReader
 
-def parse_uploaded_file(uploaded_file):
-    filename = uploaded_file.name.lower()
 
-    try:
-        # Try reading as Excel
-        df = pd.read_excel(uploaded_file)
+def parse_file(file, carrier_name):
+    carrier = carrier_name.lower()
 
-        # Identify useful columns
-        col_map = {
-            "Loss Ratio": ["loss ratio", "loss %"],
-            "Growth": ["growth", "premium growth"],
-            "Retention": ["retention"]
-        }
-
-        def find_column(possibilities):
-            for col in df.columns:
-                for possible in possibilities:
-                    if possible in str(col).lower():
-                        return col
-            return None
-
-        loss_col = find_column(col_map["Loss Ratio"])
-        growth_col = find_column(col_map["Growth"])
-        retention_col = find_column(col_map["Retention"])
-
-        loss_val = df[loss_col].mean() if loss_col else None
-        growth_val = df[growth_col].mean() if growth_col else None
-        retention_val = df[retention_col].mean() if retention_col else None
-
+    if "fcci" in carrier:
+        return parse_fcci_pdf(file)
+    elif "texas mutual" in carrier:
+        return parse_texas_mutual_pdf(file)
+    elif "amtrust" in carrier:
+        return parse_amtrust_excel(file)
+    else:
         return {
-            "Carrier Name": infer_carrier_from_filename(filename),
-            "Line of Business": "Commercial" if "cl" in filename else "Personal",
-            "Loss Ratio (%)": round(loss_val, 1) if loss_val else "N/A",
-            "Growth (%)": round(growth_val, 1) if growth_val else "N/A",
-            "Retention (%)": round(retention_val, 1) if retention_val else "N/A",
-            "Report": extract_report_date_from_filename(filename)
-        }
-
-    except Exception:
-        return {
-            "Carrier Name": infer_carrier_from_filename(filename),
-            "Line of Business": "Unknown",
-            "Loss Ratio (%)": "Error",
-            "Growth (%)": "Error",
-            "Retention (%)": "Error",
+            "Carrier Name": carrier_name,
+            "Loss Ratio (%)": "Not supported",
+            "Growth (%)": "Not supported",
+            "Retention (%)": "Not supported",
             "Report": "Unknown"
         }
 
-def infer_carrier_from_filename(filename):
-    name = filename.replace(".xlsx", "").replace(".xls", "").replace(".pdf", "")
-    return name.replace("_", " ").replace("-", " ").title()
 
-def extract_report_date_from_filename(filename):
-    for part in filename.split("_"):
-        if part.startswith("20") and len(part) == 6:  # e.g., 202405
-            return f"{part[:4]}-{part[4:]}"
-    return "Unknown"
+def parse_fcci_pdf(file):
+    text = ""
+    with pdfplumber.open(file) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text() + "\n"
+
+    # Extract loss ratio
+    lr_match = re.search(r"Total\s+\$[\d,]+\s+\$[\d,]+\s+(\d+\.\d+)%", text)
+    loss_ratio = float(lr_match.group(1)) if lr_match else "N/A"
+
+    # Extract growth
+    wp_match = re.search(r"Total \(\$?\d+\)?\s+100.0%\s+\$([\d,]+)\s+0.0%\s+\$([\d,]+)\s+\$([\d,]+)", text)
+    if wp_match:
+        curr = int(wp_match.group(1).replace(",", ""))
+        prev = int(wp_match.group(2).replace(",", ""))
+        growth = round(((curr - prev) / prev) * 100, 2) if prev else "N/A"
+    else:
+        growth = "N/A"
+
+    # Extract retention
+    ret_match = re.search(r"TOTAL.*?\$[\d,]+\s+\d+\s+\$\d+\s+(\d+\.\d+)%", text)
+    retention = float(ret_match.group(1)) if ret_match else "N/A"
+
+    return {
+        "Carrier Name": "FCCI Insurance Company",
+        "Loss Ratio (%)": loss_ratio,
+        "Growth (%)": growth,
+        "Retention (%)": retention,
+        "Report": "2025-03-31"
+    }
+
+
+def parse_texas_mutual_pdf(file):
+    text = ""
+    reader = PdfReader(file)
+    for page in reader.pages:
+        text += page.extract_text() + "\n"
+
+    lr_match = re.search(r"Total\s+\$[\d,]+\s+\$[\d,]+\s+(\d+\.\d+)%", text)
+    loss_ratio = float(lr_match.group(1)) if lr_match else "N/A"
+
+    growth_match = re.search(r"Growth.*?(-?\d+\.\d+)%", text)
+    growth = float(growth_match.group(1)) if growth_match else "N/A"
+
+    retention_match = re.search(r"Retention.*?(\d+\.\d+)%", text)
+    retention = float(retention_match.group(1)) if retention_match else "N/A"
+
+    return {
+        "Carrier Name": "Texas Mutual Insurance Company",
+        "Loss Ratio (%)": loss_ratio,
+        "Growth (%)": growth,
+        "Retention (%)": retention,
+        "Report": "2025-05-31"
+    }
+
+
+def parse_amtrust_excel(file):
+    df = pd.read_excel(file, sheet_name=0)
+    row = df.iloc[0]
+
+    return {
+        "Carrier Name": "AmTrust North America, Inc.",
+        "Loss Ratio (%)": float(row.get("Loss Ratio", "N/A")),
+        "Growth (%)": float(row.get("Growth %", "N/A")),
+        "Retention (%)": float(row.get("Retention %", "N/A")),
+        "Report": "2025-05"
+    }
