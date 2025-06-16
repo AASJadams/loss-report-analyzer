@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: loss-report-analyzer
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py
