@@ -82,19 +82,30 @@ def parse_texas_mutual_pdf(file):
     }
 
 def parse_amtrust_excel(file):
-    df = pd.read_excel(file, sheet_name=0)
-    row = df.iloc[0]
+    df = pd.read_excel(file, skiprows=10)
+    totals_row = df[df.iloc[:, 0].astype(str).str.contains("Totals", na=False)]
 
-    def safe_float(val):
+    if not totals_row.empty:
+        row = totals_row.iloc[0]
         try:
-            return float(val)
+            wp_2024 = float(row.get("Unnamed: 1", 0))
+            wp_2025 = float(row.get("Unnamed: 2", 0))
+            earned_premium = float(row.get("Unnamed: 5", 0))
+            incurred_losses = float(row.get("Unnamed: 6", 0))
+            loss_ratio = float(row.get("Unnamed: 7", "N/A"))
+
+            growth = round(((wp_2025 - wp_2024) / wp_2024) * 100, 2) if wp_2024 else "N/A"
+            retention = round(1 - ((wp_2025 - wp_2024) / wp_2025) * 100, 2) if wp_2025 else "N/A"
+
         except:
-            return "N/A"
+            loss_ratio = growth = retention = "N/A"
+    else:
+        loss_ratio = growth = retention = "N/A"
 
     return {
         "Carrier Name": "AmTrust North America, Inc.",
-        "Loss Ratio (%)": safe_float(row.get("Loss Ratio")),
-        "Growth (%)": safe_float(row.get("Growth %")),
-        "Retention (%)": safe_float(row.get("Retention %")),
+        "Loss Ratio (%)": loss_ratio,
+        "Growth (%)": growth,
+        "Retention (%)": retention,
         "Report": "2025-05"
     }
