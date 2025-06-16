@@ -1,52 +1,59 @@
 import pandas as pd
 
-CARRIER_KEYWORDS = {
-    "Mercury": "Mercury",
-    "Foremost": "Foremost/Bristol West",
-    "Travelers": "Travelers",
-    "Liberty": "Liberty Mutual Insurance",
-    "Nationwide": "Nationwide",
-    "AmTrust": "AmTrust North America, Inc.",
-    "EMC": "EMC Underwriters",
-    "FCCI": "FCCI Insurance Company",
-    "Texas Mutual": "Texas Mutual Insurance Company",
-    "Chubb": "Chubb",
-    "Safeco": "Safeco",
-    "Stillwater": "Stillwater Insurance Group PL",
-    "Clearcover": "Clearcover",
-    "Progressive": "Progressive PL",
-    "Germania": "Germania",
-    "HOAIC": "Homeowners of America Insurance Company (HOAIC)",
-    "SECURA": "SECURA Insurance Companies"
-}
+def parse_uploaded_file(uploaded_file):
+    filename = uploaded_file.name.lower()
 
-def extract_carrier_name_from_excel(file):
     try:
-        excel = pd.ExcelFile(file)
-        for sheet in excel.sheet_names:
-            df = excel.parse(sheet, nrows=10, header=None)
-            for row in df.astype(str).values.flatten():
-                for keyword in CARRIER_KEYWORDS:
-                    if keyword.lower() in str(row).lower():
-                        return CARRIER_KEYWORDS[keyword]
+        # Try reading as Excel
+        df = pd.read_excel(uploaded_file)
+
+        # Identify useful columns
+        col_map = {
+            "Loss Ratio": ["loss ratio", "loss %"],
+            "Growth": ["growth", "premium growth"],
+            "Retention": ["retention"]
+        }
+
+        def find_column(possibilities):
+            for col in df.columns:
+                for possible in possibilities:
+                    if possible in str(col).lower():
+                        return col
+            return None
+
+        loss_col = find_column(col_map["Loss Ratio"])
+        growth_col = find_column(col_map["Growth"])
+        retention_col = find_column(col_map["Retention"])
+
+        loss_val = df[loss_col].mean() if loss_col else None
+        growth_val = df[growth_col].mean() if growth_col else None
+        retention_val = df[retention_col].mean() if retention_col else None
+
+        return {
+            "Carrier Name": infer_carrier_from_filename(filename),
+            "Line of Business": "Commercial" if "cl" in filename else "Personal",
+            "Loss Ratio (%)": round(loss_val, 1) if loss_val else "N/A",
+            "Growth (%)": round(growth_val, 1) if growth_val else "N/A",
+            "Retention (%)": round(retention_val, 1) if retention_val else "N/A",
+            "Report": extract_report_date_from_filename(filename)
+        }
+
     except Exception:
-        return None
-    return None
+        return {
+            "Carrier Name": infer_carrier_from_filename(filename),
+            "Line of Business": "Unknown",
+            "Loss Ratio (%)": "Error",
+            "Growth (%)": "Error",
+            "Retention (%)": "Error",
+            "Report": "Unknown"
+        }
 
-def parse_uploaded_file(file):
-    if file.name.endswith((".xls", ".xlsx")):
-        carrier = extract_carrier_name_from_excel(file)
-    else:
-        carrier = None
+def infer_carrier_from_filename(filename):
+    name = filename.replace(".xlsx", "").replace(".xls", "").replace(".pdf", "")
+    return name.replace("_", " ").replace("-", " ").title()
 
-    if not carrier:
-        carrier = file.name.split()[0]
-
-    return {
-        "Carrier Name": carrier,
-        "Line of Business": "Personal",
-        "Loss Ratio (%)": 54.0,
-        "Growth (%)": 5.9,
-        "Retention (%)": 71.1,
-        "Report Date": "2025-04-30"
-    }
+def extract_report_date_from_filename(filename):
+    for part in filename.split("_"):
+        if part.startswith("20") and len(part) == 6:  # e.g., 202405
+            return f"{part[:4]}-{part[4:]}"
+    return "Unknown"
