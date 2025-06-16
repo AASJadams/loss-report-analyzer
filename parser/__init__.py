@@ -85,10 +85,16 @@ def parse_amtrust_excel(file):
     df = pd.read_excel(file, sheet_name=0)
     row = df.iloc[0]
 
+    def safe_float(val):
+        try:
+            return float(val)
+        except:
+            return "N/A"
+
     return {
         "Carrier Name": "AmTrust North America, Inc.",
-        "Loss Ratio (%)": float(row.get("Loss Ratio", "N/A")),
-        "Growth (%)": float(row.get("Growth %", "N/A")),
-        "Retention (%)": float(row.get("Retention %", "N/A")),
+        "Loss Ratio (%)": safe_float(row.get("Loss Ratio")),
+        "Growth (%)": safe_float(row.get("Growth %")),
+        "Retention (%)": safe_float(row.get("Retention %")),
         "Report": "2025-05"
     }
