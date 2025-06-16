@@ -36,10 +36,12 @@ def parse_fcci_pdf(file):
         for page in pdf.pages:
             text += page.extract_text() + "\n"
 
+    # Loss Ratio
     lr_match = re.search(r"Total\s+\$[\d,]+\s+\$[\d,]+\s+(\d+\.\d+)%", text)
     loss_ratio = float(lr_match.group(1)) if lr_match else "N/A"
 
-    wp_match = re.search(r"Total \(\$?\d+\)?\s+100.0%\s+\$([\d,]+)\s+0.0%\s+\$([\d,]+)\s+\$([\d,]+)", text)
+    # Growth from WP 2025 vs 2024
+    wp_match = re.search(r"Total \(\$?\d+\)?\s+100.0%\s+\$([\d,]+)\s+0.0%\s+\$([\d,]+)", text)
     if wp_match:
         curr = int(wp_match.group(1).replace(",", ""))
         prev = int(wp_match.group(2).replace(",", ""))
@@ -47,6 +49,7 @@ def parse_fcci_pdf(file):
     else:
         growth = "N/A"
 
+    # Retention from Rolling 12
     ret_match = re.search(r"TOTAL.*?\$[\d,]+\s+\d+\s+\$\d+\s+(\d+\.\d+)%", text)
     retention = float(ret_match.group(1)) if ret_match else "N/A"
 
@@ -64,12 +67,15 @@ def parse_texas_mutual_pdf(file):
     for page in reader.pages:
         text += page.extract_text() + "\n"
 
-    lr_match = re.search(r"Total\s+\$[\d,]+\s+\$[\d,]+\s+(\d+\.\d+)%", text)
+    # Loss Ratio
+    lr_match = re.search(r"Loss Ratio.*?(\d+\.\d+)%", text)
     loss_ratio = float(lr_match.group(1)) if lr_match else "N/A"
 
+    # Growth
     growth_match = re.search(r"Growth.*?(-?\d+\.\d+)%", text)
     growth = float(growth_match.group(1)) if growth_match else "N/A"
 
+    # Retention
     retention_match = re.search(r"Retention.*?(\d+\.\d+)%", text)
     retention = float(retention_match.group(1)) if retention_match else "N/A"
 
