@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from parser import parse_uploaded_file
+from parser import parse_file
 from utils import classify_and_export_csv
 
 KNOWN_CARRIERS = sorted([
